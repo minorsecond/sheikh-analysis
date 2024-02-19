@@ -15,7 +15,6 @@ workout_data$Weight <- as.numeric(as.character(workout_data$Weight_Used))
 # Filter out rows where Date is NA
 workout_data <- workout_data %>% filter(!is.na(Date))
 
-# User Interface
 ui <- fluidPage(
   titlePanel("Workout Progress Over Time"),
   
@@ -26,13 +25,15 @@ ui <- fluidPage(
     ),
     
     mainPanel(
-      plotOutput("weightProgressPlot")
+      plotOutput("weightProgressPlot"), # Average weight plot
+      plotOutput("topWeightPlot") # Top weight plot
     )
   )
 )
 
 server <- function(input, output) {
   
+  # Plot for average weight
   output$weightProgressPlot <- renderPlot({
     selected_data <- workout_data %>%
       filter(Exercise == input$exerciseInput) %>%
@@ -41,15 +42,32 @@ server <- function(input, output) {
       ungroup() %>%
       arrange(Date)
     
-    # Prepare the plot with a GAM smooth line
     ggplot(selected_data, aes(x = Date, y = Average_Weight)) +
       geom_line() +
       geom_point() +
-      geom_smooth(method = "gam", formula = y ~ s(x), se = FALSE, color = "blue") + # GAM smooth line
+      geom_smooth(method = "gam", formula = y ~ s(x), se = FALSE, color = "blue") +
       theme_minimal() +
       labs(title = paste("Average Weight Progress for", input$exerciseInput),
-           x = "Date",
-           y = "Average Weight Lifted (lb)") +
+           x = "Date", y = "Average Weight Lifted (lb)") +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  })
+  
+  # Plot for top weight
+  output$topWeightPlot <- renderPlot({
+    top_weight_data <- workout_data %>%
+      filter(Exercise == input$exerciseInput) %>%
+      group_by(Date) %>%
+      summarise(Top_Weight = max(Weight_Used, na.rm = TRUE)) %>%
+      ungroup() %>%
+      arrange(Date)
+    
+    ggplot(top_weight_data, aes(x = Date, y = Top_Weight)) +
+      geom_line() +
+      geom_point() +
+      geom_smooth(method = "gam", formula = y ~ s(x), se = FALSE, color = "blue") + # Add GAM smooth line
+      theme_minimal() +
+      labs(title = paste("Top Weight Lifted for", input$exerciseInput),
+           x = "Date", y = "Top Weight Lifted (lb)") +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   })
 }
