@@ -4,11 +4,8 @@ library(dplyr)
 library(scales)
 library(mgcv)
 
-# Load your data
-# Ensure to change the path to where your actual data is stored
 workout_data <- read.csv('backupDB.csv', stringsAsFactors = FALSE)
 
-# Make sure the Date column is in Date format and Weight is numeric
 workout_data$Date <- as.Date(workout_data$Date, format="%Y-%m-%d")
 workout_data$Weight <- as.numeric(as.character(workout_data$Weight_Used))
 
@@ -26,7 +23,7 @@ ui <- fluidPage(
     
     mainPanel(
       plotOutput("weightProgressPlot"), # Average weight plot
-      plotOutput("topWeightPlot") # Top weight plot
+      plotOutput("topWeightPlot")
     )
   )
 )
@@ -52,7 +49,6 @@ server <- function(input, output) {
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   })
   
-  # Plot for top weight
   output$topWeightPlot <- renderPlot({
     top_weight_data <- workout_data %>%
       filter(Exercise == input$exerciseInput) %>%
@@ -64,7 +60,7 @@ server <- function(input, output) {
     ggplot(top_weight_data, aes(x = Date, y = Top_Weight)) +
       geom_line() +
       geom_point() +
-      geom_smooth(method = "gam", formula = y ~ s(x), se = FALSE, color = "blue") + # Add GAM smooth line
+      geom_smooth(method = "gam", formula = y ~ s(x), se = FALSE, color = "blue") +
       theme_minimal() +
       labs(title = paste("Top Weight Lifted for", input$exerciseInput),
            x = "Date", y = "Top Weight Lifted (lb)") +
