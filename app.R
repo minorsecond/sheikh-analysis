@@ -5,7 +5,7 @@ library(scales)
 library(mgcv)
 
 ui <- fluidPage(
-  titlePanel("Workout Progress Over Time"),
+  titlePanel("Workout Progress Dashboard"),
   
   sidebarLayout(
     sidebarPanel(
@@ -13,42 +13,71 @@ ui <- fluidPage(
                 accept = c("text/csv", 
                            "text/comma-separated-values,text/plain", 
                            ".csv")),
-      selectInput("exerciseInput", "Choose an Exercise:", choices = NULL) # Choices will be updated based on uploaded file
+      selectInput("exerciseInput", "Choose an Exercise:", choices = NULL), # Choices will be updated based on uploaded file
+      selectInput("weightUnit", "Select Weight Units:", choices = c("LB", "KG"), selected = "KG")
     ),
     
     mainPanel(
-      plotOutput("weightProgressPlot"),
-      plotOutput("topWeightPlot"),
-      plotOutput("volumeLoadPlot")
+      tabsetPanel(
+        tabPanel("Graphs", 
+                 plotOutput("weightProgressPlot"),
+                 plotOutput("topWeightPlot"),
+                 plotOutput("volumeLoadPlot")
+        ),
+        tabPanel("Explanations",
+                 tags$div(
+                   h3("Average Weight Progress for Selected Exercise"),
+                   p("This graph shows the average weight lifted over time for the selected exercise."),
+                   h3("Top Weight Lifted with Median RIR"),
+                   p("This graph displays the top weight lifted each day for the selected exercise, with the color indicating the median RIR (Rate of Perceived Exertion)."),
+                   h3("Volume Load Over Time"),
+                   p("This graph illustrates the total volume load over time for the selected exercise, with separate lines for each main muscle group involved.")
+                 )
+        )
+      )
     )
   )
 )
 
 server <- function(input, output, session) {
   
-  # Reactive expression for data processing
   processedData <- reactive({
-    inFile <- input$fileUpload
+    req(input$fileUpload, input$weightUnit)  # Wait for file upload and unit selection
     
-    if (is.null(inFile)) {
-      return(NULL)
-    }
-    
-    read.csv(inFile$datapath, stringsAsFactors = FALSE) %>%
+    df <- read.csv(input$fileUpload$datapath, stringsAsFactors = FALSE) %>%
       mutate(Date = as.Date(Date, format = "%Y-%m-%d"),
              Weight_Used = as.numeric(as.character(Weight_Used)),
-             Reps_Done = as.numeric(as.character(Reps_Done)), # Ensure Reps_Done is numeric
+             Reps_Done = as.numeric(as.character(Reps_Done)),
              RIR = as.numeric(as.character(RIR))) %>%
       filter(!is.na(Date))
+    
+    valid_units <- c("LB", "lb", "KG", "kg")
+    if (!all(df$Weight_Units %in% valid_units)) {
+      stop("Invalid or missing weight units detected in the input data.")
+    }
+    
+    if (input$weightUnit == "KG") {
+      df$Weight_Used <- ifelse(toupper(df$Weight_Units) == "LB", df$Weight_Used * 0.453592, df$Weight_Used)
+      df$Weight_Units <- "KG"
+    } else {
+      df$Weight_Used <- ifelse(toupper(df$Weight_Units) == "KG", df$Weight_Used / 0.453592, df$Weight_Used)
+      df$Weight_Units <- "LB"
+    }
+    
+    return(df)
   })
   
-  # Dynamically update exercise selection input
+  yAxisLabel <- reactive({
+    paste("Weight Lifted (", input$weightUnit, ")")
+  })
+  
   observe({
     data <- processedData()
-    updateSelectInput(session, "exerciseInput", choices = unique(data$Exercise))
+    if (!is.null(data)) {
+      updateSelectInput(session, "exerciseInput", choices = unique(data$Exercise))
+    }
   })
   
-  # Plot for average weight lifted over time
   output$weightProgressPlot <- renderPlot({
     data <- processedData()
     if (is.null(data)) return()
@@ -66,7 +95,7 @@ server <- function(input, output, session) {
       geom_smooth(method = "gam", formula = y ~ s(x), se = FALSE, color = "blue") +
       theme_minimal() +
       labs(title = paste("Average Weight Progress for", input$exerciseInput),
-           x = "Date", y = "Average Weight Lifted (lb)") +
+           x = "Date", y = yAxisLabel()) +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   })
   
@@ -74,22 +103,19 @@ server <- function(input, output, session) {
     data <- processedData()
     if (is.null(data) || nrow(data) == 0) return()
     
-    # Step 1: Identify the top weight for each day and join this information back to the original dataset
     top_weights <- data %>%
       filter(Exercise == input$exerciseInput) %>%
       group_by(Date) %>%
       summarise(Top_Weight = max(Weight_Used, na.rm = TRUE)) %>%
       ungroup()
     
-    # Ensuring that only records with Weight_Used equal to Top_Weight are selected
     filtered_data <- data %>%
       inner_join(top_weights, by = "Date") %>%
       filter(Weight_Used == Top_Weight)
     
-    # Step 2: Calculate the median RIR for these filtered records
     median_rir_data <- filtered_data %>%
       group_by(Date) %>%
-      summarise(Top_Weight = first(Top_Weight),  # Ensuring Top_Weight is available
+      summarise(Top_Weight = first(Top_Weight),
                 Median_RIR = median(RIR, na.rm = TRUE)) %>%
       ungroup()
     
@@ -105,7 +131,7 @@ server <- function(input, output, session) {
       geom_smooth(method = "gam", formula = y ~ s(x), se = FALSE, color = "blue") +
       theme_minimal() +
       labs(title = paste("Top Weight Lifted with Median RIR for", input$exerciseInput),
-           x = "Date", y = "Top Weight Lifted (lb)") +
+           x = "Date", y = yAxisLabel()) +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   })
   
@@ -113,11 +139,9 @@ server <- function(input, output, session) {
     data <- processedData()
     if (is.null(data) || nrow(data) == 0) return()
     
-    # Filter data for the selected exercise
     exercise_data <- data %>%
       filter(Exercise == input$exerciseInput)
     
-    # Calculate volume load and sum by Date and Main_Muscle for the selected exercise
     volume_load_data <- exercise_data %>%
       mutate(Volume_Load = Weight_Used * Reps_Done) %>%
       group_by(Date, Main_Muscle) %>%
@@ -125,7 +149,6 @@ server <- function(input, output, session) {
       ungroup() %>%
       arrange(Date, Main_Muscle)
     
-    # Create the Volume Load plot for the selected exercise, with separate lines for each main muscle
     ggplot(volume_load_data, aes(x = Date, y = Total_Volume_Load, color = Main_Muscle, group = Main_Muscle)) +
       geom_line() +
       labs(title = paste("Volume Load Over Time for", input$exerciseInput),
