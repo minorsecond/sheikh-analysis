@@ -9,7 +9,7 @@ ui <- fluidPage(
   
   sidebarLayout(
     sidebarPanel(
-      fileInput("fileUpload", "Upload your CSV file", 
+      fileInput("fileUpload", "Upload your SG Backup CSV file", 
                 accept = c("text/csv", 
                            "text/comma-separated-values,text/plain", 
                            ".csv")),
@@ -199,17 +199,26 @@ server <- function(input, output, session) {
     data <- processedData()
     if (is.null(data) || nrow(data) == 0) return()
     
+    # Filter data for the selected exercise and RIR values of 0, 1, and 2
     filtered_data <- data %>%
-      filter(Exercise == input$exerciseInput, RIR %in% c(0, 1, 2))
+      filter(Exercise == input$exerciseInput, RIR %in% c(0, 1, 2), Avg_velocity != 0)  # Exclude Avg_velocity of 0
     
-    if (sum(filtered_data$Avg_velocity > 0, na.rm = TRUE) == 0) return(NULL)
+    # Calculate the median velocity for each RIR per workout
+    median_velocity <- filtered_data %>%
+      group_by(Date, RIR) %>%
+      summarise(Median_Avg_velocity = median(Avg_velocity, na.rm = TRUE)) %>%
+      filter(!is.na(Median_Avg_velocity))  # Remove any NA values
     
-    ggplot(filtered_data, aes(x = Date, y = Avg_velocity, color = factor(RIR))) +
+    # Check if there are any records with valid median velocity data
+    if (nrow(median_velocity) == 0) return(NULL)
+    
+    # Plot median velocity over time by RIR
+    ggplot(median_velocity, aes(x = Date, y = Median_Avg_velocity, color = factor(RIR))) +
       geom_line() +
-      labs(title = paste("Median RIR Over Time for", input$exerciseInput),
-           x = "Date", y = "Median RIR",
+      labs(title = paste("Median Velocity Over Time by RIR for", input$exerciseInput),
+           x = "Date", y = "Median Velocity",
            color = "RIR") +
-      scale_color_brewer(palette = "Set1", name = "RIR") +
+      scale_color_brewer(palette = "Set1", name = "RIR") +  # Change palette to a brighter one
       theme_minimal()
   })
 }
