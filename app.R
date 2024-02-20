@@ -99,14 +99,15 @@ server <- function(input, output, session) {
                 Median_RIR = median(RIR, na.rm = TRUE)) %>%
       ungroup()
     
-    # Plotting the data
     ggplot(median_rir_data, aes(x = Date, y = Top_Weight)) +
       geom_line(color = "gray") +
-      geom_point(aes(color = Median_RIR), size = 3) +
-      scale_color_gradient(low = "red", high = "blue", 
-                           limits = c(0, 5), 
-                           na.value = "black", 
-                           oob = scales::oob_squish) +
+      geom_point(aes(color = 5 - Median_RIR), size = 3) +  # Invert the RIR value for color mapping
+      scale_color_gradient(low = "blue", high = "red",
+                           limits = c(0, 5),
+                           breaks = c(0, 2.5, 5),
+                           labels = c("5", "2.5", "0"),  # Adjust labels to reflect inverted RIR values
+                           na.value = "black",
+                           guide = guide_colorbar(title = "RIR", title.position = "top", title.hjust = 0.5)) +
       geom_smooth(method = "gam", formula = y ~ s(x), se = FALSE, color = "darkred") +
       theme_minimal() +
       labs(title = paste("Top Weight Lifted with Median RIR for", input$exerciseInput),
