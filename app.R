@@ -3,6 +3,7 @@ library(ggplot2)
 library(dplyr)
 library(scales)
 library(mgcv)
+library(RColorBrewer)
 
 ui <- fluidPage(
   titlePanel("Workout Progress Dashboard"),
@@ -23,7 +24,8 @@ ui <- fluidPage(
                  plotOutput("weightProgressPlot"),
                  plotOutput("topWeightPlot"),
                  plotOutput("volumeLoadPlot"),
-                 plotOutput("velocityBoxPlot")
+                 plotOutput("velocityBoxPlot"),
+                 plotOutput("velocityOverTimePlot")
         ),
         tabPanel("Explanations",
                  tags$div(
@@ -34,7 +36,9 @@ ui <- fluidPage(
                    h3("Volume Load Over Time"),
                    p("This graph illustrates the total volume load over time for the selected exercise, with separate lines for each main muscle group involved."),
                    h3("Average Velocity by RIR"),
-                   p("This box plot shows the distribution of average velocity across different levels of RIR for the selected exercise. The box represents the interquartile range (IQR), with the horizontal line inside the box indicating the median velocity. The whiskers extend to the minimum and maximum velocities within 1.5 times the IQR from the lower and upper quartiles, respectively. Any points beyond the whiskers are considered outliers.")
+                   p("This box plot shows the distribution of average velocity across different levels of RIR for the selected exercise. The box represents the interquartile range (IQR), with the horizontal line inside the box indicating the median velocity. The whiskers extend to the minimum and maximum velocities within 1.5 times the IQR from the lower and upper quartiles, respectively. Any points beyond the whiskers are considered outliers."),
+                   h3("Median Velocity Over Time by RIR"),
+                   p("This graph illustrates the median velocity over time for sets performed at Reps in Reserve (RIR) values of 0, 1, and 2 for the selected exercise. A decrease in velocity over time may indicate an improvement in mental toughness and the ability to overcome challenging lifts with reduced RIR.")
                  )
         )
       )
@@ -119,7 +123,7 @@ server <- function(input, output, session) {
     top_weights <- data %>%
       filter(Exercise == input$exerciseInput) %>%
       group_by(Date) %>%
-      summarise(Top_Weight = max(Weight_Used, na.rm = TRUE)) %>%
+      summarise(Top_Weight = ifelse(all(is.na(Weight_Used)), NA, max(Weight_Used, na.rm = TRUE))) %>%
       ungroup()
     
     filtered_data <- data %>%
@@ -190,6 +194,24 @@ server <- function(input, output, session) {
       theme_minimal() +
       scale_fill_brewer(palette = "Set3") +
       labs(fill = "RIR")
+  })
+  
+  output$velocityOverTimePlot <- renderPlot({
+    data <- processedData()
+    if (is.null(data) || nrow(data) == 0) return()
+    
+    filtered_data <- data %>%
+      filter(Exercise == input$exerciseInput, RIR %in% c(0, 1, 2))
+    
+    if (sum(filtered_data$Avg_velocity > 0, na.rm = TRUE) == 0) return(NULL)
+    
+    ggplot(filtered_data, aes(x = Date, y = Avg_velocity, color = factor(RIR))) +
+      geom_line() +
+      labs(title = paste("Median RIR Over Time for", input$exerciseInput),
+           x = "Date", y = "Median RIR",
+           color = "RIR") +
+      scale_color_brewer(palette = "Set1", name = "RIR") +
+      theme_minimal()
   })
 }
 
