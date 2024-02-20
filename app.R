@@ -17,27 +17,51 @@ ui <- fluidPage(
   
   sidebarLayout(
     sidebarPanel(
-      selectInput("exerciseInput", "Choose an Exercise:", 
-                  choices = unique(workout_data$Exercise))
+      fileInput("fileUpload", "Upload your CSV file", 
+                accept = c("text/csv", 
+                           "text/comma-separated-values,text/plain", 
+                           ".csv")),
+      selectInput("exerciseInput", "Choose an Exercise:", choices = NULL) # Choices will be updated based on uploaded file
     ),
     
     mainPanel(
       plotOutput("weightProgressPlot"), # Average weight plot
-      plotOutput("topWeightPlot")
+      plotOutput("topWeightPlot") # Top weight plot
     )
   )
 )
 
-server <- function(input, output) {
+server <- function(input, output, session) {
+  processedData <- reactive({
+    inFile <- input$fileUpload
+    
+    if (is.null(inFile))
+      return(NULL)
   
-  # Plot for average weight
+    read.csv(inFile$datapath, stringsAsFactors = FALSE) %>%
+      mutate(Date = as.Date(Date, format = "%Y-%m-%d"),
+             Weight = as.numeric(as.character(Weight_Used))) %>%
+      filter(!is.na(Date))
+  })
+  
+  # Update 'selectInput' choices based on uploaded file
+  observe({
+    data <- processedData()
+    updateSelectInput(session, "exerciseInput", choices = unique(data$Exercise))
+  })
+  
   output$weightProgressPlot <- renderPlot({
-    selected_data <- workout_data %>%
+    data <- processedData()
+    if (is.null(data)) return()
+    
+    selected_data <- data %>%
       filter(Exercise == input$exerciseInput) %>%
       group_by(Date) %>%
-      summarise(Average_Weight = mean(Weight_Used, na.rm = TRUE)) %>%
+      summarise(Average_Weight = mean(Weight, na.rm = TRUE)) %>%
       ungroup() %>%
       arrange(Date)
+    
+    if (nrow(selected_data) == 0) return()
     
     ggplot(selected_data, aes(x = Date, y = Average_Weight)) +
       geom_line() +
@@ -50,12 +74,17 @@ server <- function(input, output) {
   })
   
   output$topWeightPlot <- renderPlot({
-    top_weight_data <- workout_data %>%
+    data <- processedData()
+    if (is.null(data)) return()
+    
+    top_weight_data <- data %>%
       filter(Exercise == input$exerciseInput) %>%
       group_by(Date) %>%
-      summarise(Top_Weight = max(Weight_Used, na.rm = TRUE)) %>%
+      summarise(Top_Weight = max(Weight, na.rm = TRUE)) %>%
       ungroup() %>%
       arrange(Date)
+    
+    if (nrow(top_weight_data) == 0) return()
     
     ggplot(top_weight_data, aes(x = Date, y = Top_Weight)) +
       geom_line() +
@@ -68,5 +97,4 @@ server <- function(input, output) {
   })
 }
 
-# Run the application
 shinyApp(ui = ui, server = server)
