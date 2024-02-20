@@ -199,26 +199,22 @@ server <- function(input, output, session) {
     data <- processedData()
     if (is.null(data) || nrow(data) == 0) return()
     
-    # Filter data for the selected exercise and RIR values of 0, 1, and 2
     filtered_data <- data %>%
       filter(Exercise == input$exerciseInput, RIR %in% c(0, 1, 2), Avg_velocity != 0)  # Exclude Avg_velocity of 0
     
-    # Calculate the median velocity for each RIR per workout
     median_velocity <- filtered_data %>%
       group_by(Date, RIR) %>%
       summarise(Median_Avg_velocity = median(Avg_velocity, na.rm = TRUE)) %>%
       filter(!is.na(Median_Avg_velocity))  # Remove any NA values
     
-    # Check if there are any records with valid median velocity data
     if (nrow(median_velocity) == 0) return(NULL)
     
-    # Plot median velocity over time by RIR
     ggplot(median_velocity, aes(x = Date, y = Median_Avg_velocity, color = factor(RIR))) +
       geom_line() +
       labs(title = paste("Median Velocity Over Time by RIR for", input$exerciseInput),
            x = "Date", y = "Median Velocity",
            color = "RIR") +
-      scale_color_brewer(palette = "Set1", name = "RIR") +  # Change palette to a brighter one
+      scale_color_brewer(palette = "Set1", name = "RIR") +
       theme_minimal()
   })
 }
