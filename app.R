@@ -4,14 +4,6 @@ library(dplyr)
 library(scales)
 library(mgcv)
 
-workout_data <- read.csv('backupDB.csv', stringsAsFactors = FALSE)
-
-workout_data$Date <- as.Date(workout_data$Date, format="%Y-%m-%d")
-workout_data$Weight <- as.numeric(as.character(workout_data$Weight_Used))
-
-# Filter out rows where Date is NA
-workout_data <- workout_data %>% filter(!is.na(Date))
-
 ui <- fluidPage(
   titlePanel("Workout Progress Over Time"),
   
@@ -25,8 +17,9 @@ ui <- fluidPage(
     ),
     
     mainPanel(
-      plotOutput("weightProgressPlot"), # Average weight plot
-      plotOutput("topWeightPlot") # Top weight plot
+      plotOutput("weightProgressPlot"),
+      plotOutput("topWeightPlot"),
+      plotOutput("volumeLoadPlot")
     )
   )
 )
@@ -44,6 +37,7 @@ server <- function(input, output, session) {
     read.csv(inFile$datapath, stringsAsFactors = FALSE) %>%
       mutate(Date = as.Date(Date, format = "%Y-%m-%d"),
              Weight_Used = as.numeric(as.character(Weight_Used)),
+             Reps_Done = as.numeric(as.character(Reps_Done)), # Ensure Reps_Done is numeric
              RIR = as.numeric(as.character(RIR))) %>%
       filter(!is.na(Date))
   })
@@ -108,11 +102,39 @@ server <- function(input, output, session) {
                            labels = c("5", "2.5", "0"),  # Adjust labels to reflect inverted RIR values
                            na.value = "black",
                            guide = guide_colorbar(title = "RIR", title.position = "top", title.hjust = 0.5)) +
-      geom_smooth(method = "gam", formula = y ~ s(x), se = FALSE, color = "darkred") +
+      geom_smooth(method = "gam", formula = y ~ s(x), se = FALSE, color = "blue") +
       theme_minimal() +
       labs(title = paste("Top Weight Lifted with Median RIR for", input$exerciseInput),
            x = "Date", y = "Top Weight Lifted (lb)") +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  })
+  
+  output$volumeLoadPlot <- renderPlot({
+    data <- processedData()
+    if (is.null(data) || nrow(data) == 0) return()
+    
+    # Filter data for the selected exercise
+    exercise_data <- data %>%
+      filter(Exercise == input$exerciseInput)
+    
+    # Calculate volume load and sum by Date and Main_Muscle for the selected exercise
+    volume_load_data <- exercise_data %>%
+      mutate(Volume_Load = Weight_Used * Reps_Done) %>%
+      group_by(Date, Main_Muscle) %>%
+      summarise(Total_Volume_Load = sum(Volume_Load, na.rm = TRUE)) %>%
+      ungroup() %>%
+      arrange(Date, Main_Muscle)
+    
+    # Create the Volume Load plot for the selected exercise, with separate lines for each main muscle
+    ggplot(volume_load_data, aes(x = Date, y = Total_Volume_Load, color = Main_Muscle, group = Main_Muscle)) +
+      geom_line() +
+      labs(title = paste("Volume Load Over Time for", input$exerciseInput),
+           x = "Date",
+           y = "Total Volume Load") +
+      geom_smooth(method = "gam", formula = y ~ s(x), se = FALSE, color = "blue") +
+      theme_minimal() +
+      theme(legend.position = "right") +
+      guides(color = guide_legend(title = "Main Muscle Group"))
   })
 }
 
