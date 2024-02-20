@@ -95,7 +95,7 @@ server <- function(input, output, session) {
       geom_smooth(method = "gam", formula = y ~ s(x), se = FALSE, color = "blue") +
       theme_minimal() +
       labs(title = paste("Average Weight Progress for", input$exerciseInput),
-           x = "Date", y = yAxisLabel()) +
+           x = "Date", y = paste("Average Weight Lifted (", input$weightUnit, ")")) +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   })
   
@@ -131,7 +131,7 @@ server <- function(input, output, session) {
       geom_smooth(method = "gam", formula = y ~ s(x), se = FALSE, color = "blue") +
       theme_minimal() +
       labs(title = paste("Top Weight Lifted with Median RIR for", input$exerciseInput),
-           x = "Date", y = yAxisLabel()) +
+           x = "Date", y = paste("Top Weight Lifted (", input$weightUnit, ")")) +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   })
   
@@ -153,11 +153,12 @@ server <- function(input, output, session) {
       geom_line() +
       labs(title = paste("Volume Load Over Time for", input$exerciseInput),
            x = "Date",
-           y = "Total Volume Load") +
+           y = paste("Total Volume (", input$weightUnit, ")")) +
       geom_smooth(method = "gam", formula = y ~ s(x), se = FALSE, color = "blue") +
       theme_minimal() +
       theme(legend.position = "right") +
       guides(color = guide_legend(title = "Main Muscle Group"))
+    
   })
 }
 
