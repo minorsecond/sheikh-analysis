@@ -22,16 +22,19 @@ ui <- fluidPage(
         tabPanel("Graphs", 
                  plotOutput("weightProgressPlot"),
                  plotOutput("topWeightPlot"),
-                 plotOutput("volumeLoadPlot")
+                 plotOutput("volumeLoadPlot"),
+                 plotOutput("velocityBoxPlot")
         ),
         tabPanel("Explanations",
                  tags$div(
                    h3("Average Weight Progress for Selected Exercise"),
                    p("This graph shows the average weight lifted over time for the selected exercise."),
                    h3("Top Weight Lifted with Median RIR"),
-                   p("This graph displays the top weight lifted each day for the selected exercise, with the color indicating the median RIR (Rate of Perceived Exertion)."),
+                   p("This graph displays the top weight lifted each day for the selected exercise, with the color indicating the median RIR (Reps in Reserve)."),
                    h3("Volume Load Over Time"),
-                   p("This graph illustrates the total volume load over time for the selected exercise, with separate lines for each main muscle group involved.")
+                   p("This graph illustrates the total volume load over time for the selected exercise, with separate lines for each main muscle group involved."),
+                   h3("Average Velocity by RIR"),
+                   p("This box plot shows the distribution of average velocity across different levels of RIR for the selected exercise. The box represents the interquartile range (IQR), with the horizontal line inside the box indicating the median velocity. The whiskers extend to the minimum and maximum velocities within 1.5 times the IQR from the lower and upper quartiles, respectively. Any points beyond the whiskers are considered outliers.")
                  )
         )
       )
@@ -40,6 +43,8 @@ ui <- fluidPage(
 )
 
 server <- function(input, output, session) {
+  
+  selectedExercise <- reactiveVal(NULL)
   
   processedData <- reactive({
     req(input$fileUpload, input$weightUnit)  # Wait for file upload and unit selection
@@ -75,7 +80,15 @@ server <- function(input, output, session) {
     data <- processedData()
     if (!is.null(data)) {
       updateSelectInput(session, "exerciseInput", choices = unique(data$Exercise))
+      
+      if (!is.null(selectedExercise())) {
+        updateSelectInput(session, "exerciseInput", selected = selectedExercise())
+      }
     }
+  })
+  
+  observeEvent(input$exerciseInput, {
+    selectedExercise(input$exerciseInput)
   })
   
   output$weightProgressPlot <- renderPlot({
@@ -125,7 +138,7 @@ server <- function(input, output, session) {
       scale_color_gradient(low = "blue", high = "red",
                            limits = c(0, 5),
                            breaks = c(0, 2.5, 5),
-                           labels = c("5", "2.5", "0"),  # Adjust labels to reflect inverted RIR values
+                           labels = c("5+", "2.5", "0"),  # Adjust labels to reflect inverted RIR values
                            na.value = "black",
                            guide = guide_colorbar(title = "RIR", title.position = "top", title.hjust = 0.5)) +
       geom_smooth(method = "gam", formula = y ~ s(x), se = FALSE, color = "blue") +
@@ -159,6 +172,24 @@ server <- function(input, output, session) {
       theme(legend.position = "right") +
       guides(color = guide_legend(title = "Main Muscle Group"))
     
+  })
+  
+  output$velocityBoxPlot <- renderPlot({
+    data <- processedData()
+    if (is.null(data) || nrow(data) == 0) return()
+    
+    filtered_data <- data %>%
+      filter(Avg_velocity != 0, RIR != 6, Exercise == input$exerciseInput)
+    if (nrow(filtered_data) == 0) return(NULL) # Graph won't appear without velos data
+    
+    ggplot(filtered_data, aes(x = factor(RIR), y = Avg_velocity, fill = factor(RIR))) +
+      geom_boxplot() +
+      labs(title = paste("Average Velocity by RIR for", input$exerciseInput),
+           x = "RIR",
+           y = "Average Velocity") +
+      theme_minimal() +
+      scale_fill_brewer(palette = "Set3") +
+      labs(fill = "RIR")
   })
 }
 
