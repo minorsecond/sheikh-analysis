@@ -32,24 +32,29 @@ ui <- fluidPage(
 )
 
 server <- function(input, output, session) {
+  
+  # Reactive expression for data processing
   processedData <- reactive({
     inFile <- input$fileUpload
     
-    if (is.null(inFile))
+    if (is.null(inFile)) {
       return(NULL)
-  
+    }
+    
     read.csv(inFile$datapath, stringsAsFactors = FALSE) %>%
       mutate(Date = as.Date(Date, format = "%Y-%m-%d"),
-             Weight = as.numeric(as.character(Weight_Used))) %>%
+             Weight_Used = as.numeric(as.character(Weight_Used)),
+             RIR = as.numeric(as.character(RIR))) %>%
       filter(!is.na(Date))
   })
   
-  # Update 'selectInput' choices based on uploaded file
+  # Dynamically update exercise selection input
   observe({
     data <- processedData()
     updateSelectInput(session, "exerciseInput", choices = unique(data$Exercise))
   })
   
+  # Plot for average weight lifted over time
   output$weightProgressPlot <- renderPlot({
     data <- processedData()
     if (is.null(data)) return()
@@ -57,11 +62,9 @@ server <- function(input, output, session) {
     selected_data <- data %>%
       filter(Exercise == input$exerciseInput) %>%
       group_by(Date) %>%
-      summarise(Average_Weight = mean(Weight, na.rm = TRUE)) %>%
+      summarise(Average_Weight = mean(Weight_Used, na.rm = TRUE)) %>%
       ungroup() %>%
       arrange(Date)
-    
-    if (nrow(selected_data) == 0) return()
     
     ggplot(selected_data, aes(x = Date, y = Average_Weight)) +
       geom_line() +
@@ -75,23 +78,38 @@ server <- function(input, output, session) {
   
   output$topWeightPlot <- renderPlot({
     data <- processedData()
-    if (is.null(data)) return()
+    if (is.null(data) || nrow(data) == 0) return()
     
-    top_weight_data <- data %>%
+    # Step 1: Identify the top weight for each day and join this information back to the original dataset
+    top_weights <- data %>%
       filter(Exercise == input$exerciseInput) %>%
       group_by(Date) %>%
-      summarise(Top_Weight = max(Weight, na.rm = TRUE)) %>%
-      ungroup() %>%
-      arrange(Date)
+      summarise(Top_Weight = max(Weight_Used, na.rm = TRUE)) %>%
+      ungroup()
     
-    if (nrow(top_weight_data) == 0) return()
+    # Ensuring that only records with Weight_Used equal to Top_Weight are selected
+    filtered_data <- data %>%
+      inner_join(top_weights, by = "Date") %>%
+      filter(Weight_Used == Top_Weight)
     
-    ggplot(top_weight_data, aes(x = Date, y = Top_Weight)) +
-      geom_line() +
-      geom_point() +
-      geom_smooth(method = "gam", formula = y ~ s(x), se = FALSE, color = "blue") +
+    # Step 2: Calculate the median RIR for these filtered records
+    median_rir_data <- filtered_data %>%
+      group_by(Date) %>%
+      summarise(Top_Weight = first(Top_Weight),  # Ensuring Top_Weight is available
+                Median_RIR = median(RIR, na.rm = TRUE)) %>%
+      ungroup()
+    
+    # Plotting the data
+    ggplot(median_rir_data, aes(x = Date, y = Top_Weight)) +
+      geom_line(color = "gray") +
+      geom_point(aes(color = Median_RIR), size = 3) +
+      scale_color_gradient(low = "red", high = "blue", 
+                           limits = c(0, 5), 
+                           na.value = "black", 
+                           oob = scales::oob_squish) +
+      geom_smooth(method = "gam", formula = y ~ s(x), se = FALSE, color = "darkred") +
       theme_minimal() +
-      labs(title = paste("Top Weight Lifted for", input$exerciseInput),
+      labs(title = paste("Top Weight Lifted with Median RIR for", input$exerciseInput),
            x = "Date", y = "Top Weight Lifted (lb)") +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   })
