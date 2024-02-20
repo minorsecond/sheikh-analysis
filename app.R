@@ -5,7 +5,7 @@ library(scales)
 library(mgcv)
 
 ui <- fluidPage(
-  titlePanel("Workout Progress Dashboard"),
+  titlePanel("Sheiko Gold Training Insights"),
   
   sidebarLayout(
     sidebarPanel(
@@ -14,7 +14,17 @@ ui <- fluidPage(
                            "text/comma-separated-values,text/plain", 
                            ".csv")),
       selectInput("exerciseInput", "Choose an Exercise:", choices = NULL), # Choices will be updated based on uploaded file
-      selectInput("weightUnit", "Select Weight Units:", choices = c("LB", "KG"), selected = "KG")
+      selectInput("weightUnit", "Select Weight Units:", choices = c("LB", "KG"), selected = "KG"),
+      fluidRow(
+        column(12, h4("Velocity Over Time Graph Settings")),
+        column(12, checkboxInput("lowerRepRange", "Show Lower Rep Range (1-3 reps)", value = FALSE))
+      ),
+      tags$hr(),
+      tags$div(
+        p("Disclaimer: This web application is independently developed and is not affiliated with Sheiko Gold or its developer. It is intended for analytical purposes only and should not be considered as official software associated with Sheiko Gold or its developer. All data and information provided within this application are generated and processed independently."),
+        p("For any inquiries or concerns, please contact the developer at minorsecond@gmail.com.")
+      )
+      
     ),
     
     mainPanel(
@@ -201,6 +211,15 @@ server <- function(input, output, session) {
     
     filtered_data <- data %>%
       filter(Exercise == input$exerciseInput, RIR %in% c(0, 1, 2), Avg_velocity != 0)  # Exclude Avg_velocity of 0
+    
+    # Filter data based on rep range toggle
+    if (input$lowerRepRange) {
+      filtered_data <- filtered_data %>%
+        filter(Reps_Done >= 1, Reps_Done <= 3)
+    } else {
+      # Reset filtered_data to include all sets if the toggle is unchecked
+      filtered_data <- filtered_data
+    }
     
     median_velocity <- filtered_data %>%
       group_by(Date, RIR) %>%
