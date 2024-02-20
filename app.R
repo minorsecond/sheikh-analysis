@@ -3,7 +3,6 @@ library(ggplot2)
 library(dplyr)
 library(scales)
 library(mgcv)
-library(RColorBrewer)
 
 ui <- fluidPage(
   titlePanel("Workout Progress Dashboard"),
