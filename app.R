@@ -23,7 +23,8 @@ ui <- fluidPage(
       tags$div(
         class = "thick-hr",
         p("Disclaimer: This web application is independently developed and is not affiliated with Sheiko Gold or its developer. It is intended for analytical purposes only and should not be considered as official software associated with Sheiko Gold or its developer. All data and information provided within this application are generated and processed independently."),
-        p("For any inquiries or concerns, please contact the developer at minorsecond@gmail.com.")
+        p("For any inquiries or concerns, please contact the developer at minorsecond@gmail.com."),
+        p("Find the project's GitHub repository ", tags$a(href = "https://github.com/minorsecond/sheiko-analysis", "here"), ".")
       )
     ),
     
@@ -34,8 +35,11 @@ ui <- fluidPage(
                  plotOutput("topWeightPlot"),
                  plotOutput("volumeLoadPlot"),
                  plotOutput("estimatedOneRepMax"),
+                 plotOutput("lowestRIROverTime"),
                  plotOutput("velocityBoxPlot"),
-                 plotOutput("velocityOverTimePlot")
+                 plotOutput("velocityOverTimePlot"),
+                 plotOutput("velocityLossPlot"),
+                 plotOutput("powerLossPlot")
         ),
         tabPanel("Explanations",
                  tags$div(
@@ -50,7 +54,21 @@ ui <- fluidPage(
                    h3("Median Velocity Over Time by RIR"),
                    p("This graph illustrates the median velocity over time for sets performed at Reps in Reserve (RIR) values of 0, 1, and 2 for the selected exercise. A decrease in velocity over time may indicate an improvement in mental toughness and the ability to overcome challenging lifts with reduced RIR."),
                    h3("Estimated 1RM Over Time"),
-                   p("This graph displays the estimated 1RM (One Repetition Maximum) over time for the selected exercise. The red line represents the estimated 1RM, and the blue line represents the smoothed estimate with a 95% confidence interval (CI). The grey band around the smoothed line represents the range within which we are 95% confident that the true 1RM falls.")
+                   p("This graph displays the estimated 1RM (One Repetition Maximum) over time for the selected exercise. The red line represents the estimated 1RM, and the blue line represents the smoothed estimate with a 95% confidence interval (CI). The grey band around the smoothed line represents the range within which we are 95% confident that the true 1RM falls. 1RMs are only calculated for sets with fewer than 4 reps with less than 3 RIR."),
+                   h3("Average Velocity Loss Over Time"),
+                   p("This graph illustrates the total velocity loss over time for the selected exercise. Velocity loss is calculated as the difference between the velocity of the first set and the subsequent sets within each workout. A decreasing trend in velocity loss may indicate an improvement in strength or fatigue resistance, while an increasing trend may suggest fatigue or a decline in performance."),
+                   p("Interpretations:"),
+                   HTML("<ul>
+                    <li>No Velocity Loss: If the graph shows minimal or no velocity loss over time, it may indicate that the athlete is maintaining consistent performance throughout their workouts, suggesting good fatigue management and readiness to perform at a high level.</li>
+                    <li>Velocity Loss: On the other hand, if the graph shows increasing velocity loss over time, it could suggest accumulating fatigue or potential overreaching, indicating the need for adjustments in training volume, intensity, or recovery strategies.</li>
+                  </ul>"),
+                   h3("Average Power Loss Over Time"),
+                   p("This graph illustrates the average power loss over time for the selected exercise. Power loss is calculated as the percentage difference between the average power of the first set at the heaviest weight lifted and the subsequent sets at the same weight. A decreasing trend in power loss may indicate improved performance or fatigue resistance, while an increasing trend may suggest accumulating fatigue or declining performance."),
+                   p("Interpretations:"),
+                   HTML("<ul>
+                    <li>Decreasing Power Loss: A decreasing trend in power loss over time may indicate improved performance, fatigue resistance, or adaptation to training stimuli.</li>
+                    <li>Increasing Power Loss: Conversely, an increasing trend in power loss may suggest accumulating fatigue, overreaching, or declining performance, highlighting the potential need for adjustments in training volume, intensity, or recovery strategies.</li>
+                  </ul>")
                  )
         )
       )
@@ -202,7 +220,7 @@ server <- function(input, output, session) {
       geom_boxplot() +
       labs(title = paste("Average Velocity by RIR for", input$exerciseInput),
            x = "RIR",
-           y = "Average Velocity") +
+           y = "Average Velocity (m/s)") +
       theme_minimal() +
       scale_fill_brewer(palette = "Set3") +
       labs(fill = "RIR")
@@ -232,7 +250,7 @@ server <- function(input, output, session) {
     ggplot(median_velocity, aes(x = Date, y = Median_Avg_velocity, color = factor(RIR))) +
       geom_line() +
       labs(title = paste("Median Velocity Over Time by RIR for", input$exerciseInput),
-           x = "Date", y = "Median Velocity",
+           x = "Date", y = "Median Velocity (m/s)",
            color = "RIR") +
       scale_color_brewer(palette = "Set1", name = "RIR") +
       theme_minimal()
@@ -254,6 +272,8 @@ server <- function(input, output, session) {
       slice(1) %>%
       mutate(Estimated_1RM = Weight_Used * (1 + ((Reps_Done + RIR) / 30)))
     
+    if (nrow(one_rep_max_data) == 0) return(NULL)
+    
     p <- ggplot() +
       geom_line(data = one_rep_max_data, aes(x = Date, y = Estimated_1RM, color = "Estimated 1RM"), linetype = "solid", size = 1) +
       geom_smooth(data = one_rep_max_data, aes(x = Date, y = Estimated_1RM), method = "gam", se = TRUE, color = "blue") +  # Smoothed line with 95% CI
@@ -269,6 +289,111 @@ server <- function(input, output, session) {
     
     p + theme(legend.position = "bottom")
   })
+  
+  output$lowestRIROverTime <- renderPlot({
+    data <- processedData()
+    if (is.null(data) || nrow(data) == 0) return()
+    
+    # Filter the data for the selected exercise
+    selected_data <- data %>%
+      filter(Exercise == input$exerciseInput)
+    
+    if (nrow(selected_data) == 0) return(NULL)
+    
+    # Calculate the lowest RIR per workout
+    lowest_rir_data <- selected_data %>%
+      group_by(Date) %>%
+      summarise(Lowest_RIR = min(RIR)) %>%
+      filter(Lowest_RIR <= 5)  # Exclude RIR values greater than 5
+    
+    # Plot the lowest RIR over time
+    ggplot(lowest_rir_data, aes(x = Date, y = Lowest_RIR)) +
+      geom_line() +
+      geom_point() +
+      labs(title = paste("Lowest RIR Over Time for", input$exerciseInput),
+           x = "Date",
+           y = "Lowest RIR") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+      scale_y_reverse()
+  })
+  
+  output$velocityLossPlot <- renderPlot({
+    data <- processedData()
+    if (is.null(data) || nrow(data) == 0) return()
+    
+    selected_data <- data %>%
+      filter(Exercise == input$exerciseInput)
+    
+    if (nrow(selected_data) == 0) return(NULL)
+    
+    selected_data <- selected_data %>%
+      mutate(Volume = Weight_Used * Reps_Done)
+    
+    if (!"Avg_velocity" %in% colnames(selected_data)) return(NULL)
+    
+    top_sets <- selected_data %>%
+      group_by(Date) %>%
+      filter(Weight_Used == max(Weight_Used))
+    
+    # Filter out records with avg_velocity = 0
+    velocity_loss_data <- selected_data %>%
+      filter(Avg_velocity != 0) %>%
+      left_join(top_sets, by = "Date", suffix = c("", "_top")) %>%
+      mutate(Velocity_Loss = (Avg_velocity_top - Avg_velocity) / Avg_velocity_top * 100)
+    
+    # Check if velocity_loss_data is empty
+    if (nrow(velocity_loss_data) == 0) return(NULL)
+    
+    # Calculate average velocity loss per workout
+    velocity_loss_per_workout <- velocity_loss_data %>%
+      group_by(Date) %>%
+      summarise(Avg_Velocity_Loss = mean(Velocity_Loss, na.rm = TRUE))
+    
+    # Plot velocity loss over time
+    ggplot(velocity_loss_per_workout, aes(x = Date, y = Avg_Velocity_Loss)) +
+      geom_line() +
+      geom_point() +
+      labs(title = paste("Average Velocity Loss Across Top Sets for", input$exerciseInput),
+           x = "Date",
+           y = "Velocity Loss (%)") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  })
+  
+  output$powerLossPlot <- renderPlot({
+    data <- processedData()
+    if (is.null(data) || nrow(data) == 0) return()
+    
+    selected_data <- data %>%
+      filter(Exercise == input$exerciseInput)
+    
+    if (nrow(selected_data) == 0) return(NULL)
+    
+    if (!"Avg_power" %in% colnames(selected_data)) return(NULL)
+    
+    top_sets <- selected_data %>%
+      group_by(Date) %>%
+      filter(Weight_Used == max(Weight_Used))
+    
+    power_loss_data <- selected_data %>%
+      left_join(top_sets, by = "Date", suffix = c("", "_top")) %>%
+      filter(!is.na(Avg_power) & Avg_power != 0) %>%
+      mutate(Power_Loss = (Avg_power_top - Avg_power) / Avg_power_top * 100)
+    
+    power_loss_per_workout <- power_loss_data %>%
+      group_by(Date) %>%
+      summarise(Avg_Power_Loss = mean(Power_Loss, na.rm = TRUE))
+    
+    ggplot(power_loss_per_workout, aes(x = Date, y = Avg_Power_Loss)) +
+      geom_line() +
+      geom_point() +
+      labs(title = paste("Average Power Loss Across Top Sets for", input$exerciseInput),
+           x = "Date",
+           y = "Power Loss (%)") +
+      theme_minimal() +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    })
 }
 
 shinyApp(ui = ui, server = server)
