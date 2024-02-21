@@ -55,15 +55,15 @@ ui <- fluidPage(
                    p("This graph illustrates the median velocity over time for sets performed at Reps in Reserve (RIR) values of 0, 1, and 2 for the selected exercise. A decrease in velocity over time may indicate an improvement in mental toughness and the ability to overcome challenging lifts with reduced RIR."),
                    h3("Estimated 1RM Over Time"),
                    p("This graph displays the estimated 1RM (One Repetition Maximum) over time for the selected exercise. The red line represents the estimated 1RM, and the blue line represents the smoothed estimate with a 95% confidence interval (CI). The grey band around the smoothed line represents the range within which we are 95% confident that the true 1RM falls. 1RMs are only calculated for sets with fewer than 4 reps with less than 3 RIR."),
-                   h3("Average Velocity Loss Over Time"),
-                   p("This graph illustrates the total velocity loss over time for the selected exercise. Velocity loss is calculated as the difference between the velocity of the first set and the subsequent sets within each workout. A decreasing trend in velocity loss may indicate an improvement in strength or fatigue resistance, while an increasing trend may suggest fatigue or a decline in performance."),
+                   h3("Median Velocity Loss Over Time"),
+                   p("This graph illustrates the median velocity loss over time for the selected exercise. Velocity loss is calculated as the difference between the velocity of the first set and the subsequent sets within each workout. A decreasing trend in velocity loss may indicate an improvement in strength or fatigue resistance, while an increasing trend may suggest fatigue or a decline in performance."),
                    p("Interpretations:"),
                    HTML("<ul>
                     <li>No Velocity Loss: If the graph shows minimal or no velocity loss over time, it may indicate that the athlete is maintaining consistent performance throughout their workouts, suggesting good fatigue management and readiness to perform at a high level.</li>
                     <li>Velocity Loss: On the other hand, if the graph shows increasing velocity loss over time, it could suggest accumulating fatigue or potential overreaching, indicating the need for adjustments in training volume, intensity, or recovery strategies.</li>
                   </ul>"),
-                   h3("Average Power Loss Over Time"),
-                   p("This graph illustrates the average power loss over time for the selected exercise. Power loss is calculated as the percentage difference between the average power of the first set at the heaviest weight lifted and the subsequent sets at the same weight. A decreasing trend in power loss may indicate improved performance or fatigue resistance, while an increasing trend may suggest accumulating fatigue or declining performance."),
+                   h3("Median Power Loss Over Time"),
+                   p("This graph illustrates the median power loss over time for the selected exercise. Power loss is calculated as the percentage difference between the average power of the first set at the heaviest weight lifted and the subsequent sets at the same weight. A decreasing trend in power loss may indicate improved performance or fatigue resistance, while an increasing trend may suggest accumulating fatigue or declining performance."),
                    p("Interpretations:"),
                    HTML("<ul>
                     <li>Decreasing Power Loss: A decreasing trend in power loss over time may indicate improved performance, fatigue resistance, or adaptation to training stimuli.</li>
@@ -348,13 +348,13 @@ server <- function(input, output, session) {
     # Calculate average velocity loss per workout
     velocity_loss_per_workout <- velocity_loss_data %>%
       group_by(Date) %>%
-      summarise(Avg_Velocity_Loss = mean(Velocity_Loss, na.rm = TRUE))
+      summarise(Avg_Velocity_Loss = median(Velocity_Loss, na.rm = TRUE))
     
     # Plot velocity loss over time
     ggplot(velocity_loss_per_workout, aes(x = Date, y = Avg_Velocity_Loss)) +
       geom_line() +
       geom_point() +
-      labs(title = paste("Average Velocity Loss Across Top Sets for", input$exerciseInput),
+      labs(title = paste("Median Velocity Loss Across Top Sets for", input$exerciseInput),
            x = "Date",
            y = "Velocity Loss (%)") +
       theme_minimal() +
@@ -383,12 +383,12 @@ server <- function(input, output, session) {
     
     power_loss_per_workout <- power_loss_data %>%
       group_by(Date) %>%
-      summarise(Avg_Power_Loss = mean(Power_Loss, na.rm = TRUE))
+      summarise(Avg_Power_Loss = median(Power_Loss, na.rm = TRUE))
     
     ggplot(power_loss_per_workout, aes(x = Date, y = Avg_Power_Loss)) +
       geom_line() +
       geom_point() +
-      labs(title = paste("Average Power Loss Across Top Sets for", input$exerciseInput),
+      labs(title = paste("Median Power Loss Across Top Sets for", input$exerciseInput),
            x = "Date",
            y = "Power Loss (%)") +
       theme_minimal() +
