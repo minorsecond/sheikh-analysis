@@ -4,7 +4,7 @@ library(dplyr)
 library(scales)
 library(mgcv)
 
-ui <- fluidPage(
+ui <- fluidPage( 
   titlePanel("Sheiko Gold Training Insights"),
   
   sidebarLayout(
@@ -19,12 +19,12 @@ ui <- fluidPage(
         column(12, h4("Velocity Over Time Graph Settings")),
         column(12, checkboxInput("lowerRepRange", "Show Lower Rep Range (1-3 reps)", value = FALSE))
       ),
-      tags$hr(),
+      tags$style(HTML(".thick-hr {border-top: 2px solid black; /* Adjust thickness as needed */}")),
       tags$div(
+        class = "thick-hr",
         p("Disclaimer: This web application is independently developed and is not affiliated with Sheiko Gold or its developer. It is intended for analytical purposes only and should not be considered as official software associated with Sheiko Gold or its developer. All data and information provided within this application are generated and processed independently."),
         p("For any inquiries or concerns, please contact the developer at minorsecond@gmail.com.")
       )
-      
     ),
     
     mainPanel(
@@ -33,6 +33,7 @@ ui <- fluidPage(
                  plotOutput("weightProgressPlot"),
                  plotOutput("topWeightPlot"),
                  plotOutput("volumeLoadPlot"),
+                 plotOutput("estimatedOneRepMax"),
                  plotOutput("velocityBoxPlot"),
                  plotOutput("velocityOverTimePlot")
         ),
@@ -47,7 +48,9 @@ ui <- fluidPage(
                    h3("Average Velocity by RIR"),
                    p("This box plot shows the distribution of average velocity across different levels of RIR for the selected exercise. The box represents the interquartile range (IQR), with the horizontal line inside the box indicating the median velocity. The whiskers extend to the minimum and maximum velocities within 1.5 times the IQR from the lower and upper quartiles, respectively. Any points beyond the whiskers are considered outliers."),
                    h3("Median Velocity Over Time by RIR"),
-                   p("This graph illustrates the median velocity over time for sets performed at Reps in Reserve (RIR) values of 0, 1, and 2 for the selected exercise. A decrease in velocity over time may indicate an improvement in mental toughness and the ability to overcome challenging lifts with reduced RIR.")
+                   p("This graph illustrates the median velocity over time for sets performed at Reps in Reserve (RIR) values of 0, 1, and 2 for the selected exercise. A decrease in velocity over time may indicate an improvement in mental toughness and the ability to overcome challenging lifts with reduced RIR."),
+                   h3("Estimated 1RM Over Time"),
+                   p("This graph displays the estimated 1RM (One Repetition Maximum) over time for the selected exercise. The red line represents the estimated 1RM, and the blue line represents the smoothed estimate with a 95% confidence interval (CI). The grey band around the smoothed line represents the range within which we are 95% confident that the true 1RM falls.")
                  )
         )
       )
@@ -212,12 +215,10 @@ server <- function(input, output, session) {
     filtered_data <- data %>%
       filter(Exercise == input$exerciseInput, RIR %in% c(0, 1, 2), Avg_velocity != 0)  # Exclude Avg_velocity of 0
     
-    # Filter data based on rep range toggle
     if (input$lowerRepRange) {
       filtered_data <- filtered_data %>%
         filter(Reps_Done >= 1, Reps_Done <= 3)
     } else {
-      # Reset filtered_data to include all sets if the toggle is unchecked
       filtered_data <- filtered_data
     }
     
@@ -235,6 +236,38 @@ server <- function(input, output, session) {
            color = "RIR") +
       scale_color_brewer(palette = "Set1", name = "RIR") +
       theme_minimal()
+  })
+  
+  output$estimatedOneRepMax <- renderPlot({
+    data <- processedData()
+    if (is.null(data) || nrow(data) == 0) return()
+    
+    selected_data <- data %>%
+      filter(Exercise == input$exerciseInput)
+    
+    if (nrow(selected_data) == 0) return(NULL)
+    
+    one_rep_max_data <- selected_data %>%
+      filter(Reps_Done < 4, RIR < 3) %>%
+      group_by(Date) %>%
+      arrange(Date, desc(Weight_Used)) %>%
+      slice(1) %>%
+      mutate(Estimated_1RM = Weight_Used * (1 + ((Reps_Done + RIR) / 30)))
+    
+    p <- ggplot() +
+      geom_line(data = one_rep_max_data, aes(x = Date, y = Estimated_1RM, color = "Estimated 1RM"), linetype = "solid", size = 1) +
+      geom_smooth(data = one_rep_max_data, aes(x = Date, y = Estimated_1RM), method = "gam", se = TRUE, color = "blue") +  # Smoothed line with 95% CI
+      geom_text(aes(label = "The grey 95% confidence band represents the range within which we are 95% confident that the true 1RM falls."),
+                x = Inf, y = -Inf, hjust = 1, vjust = -1, color = "blue", size = 4) +
+      labs(title = paste("Estimated 1RM Over Time for", input$exerciseInput),
+           x = "Date",
+           y = paste("Estimated 1RM (", input$weightUnit, ")"),
+           color = "Metric") +
+      scale_color_manual(values = c("Estimated 1RM" = "red"),
+                         labels = c("Estimated 1RM")) + 
+      theme_minimal()
+    
+    p + theme(legend.position = "bottom")
   })
 }
 
